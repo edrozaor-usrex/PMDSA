@@ -1,0 +1,240 @@
+---
+title: "Stat 208 Final Requirement"
+author: "Edmond Ortal"
+date: "December 18, 2018"
+output: html_document
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+if (!require(tidyverse)) install.packages("tidyverse")
+library(tidyverse)
+if (!require(readxl)) install.packages("readxl")
+library(readxl)
+if (!require(dplyr)) install.packages("dplyr")
+library(dplyr)
+if (!require(readr)) install.packages("readr")
+library(readr)
+if (!require(lmSupport)) install.packages("lmSupport")
+library(lmSupport)
+if (!require(leaps)) install.packages("leaps")
+library(leaps)
+if (!require(lmtest)) install.packages("lmtest")
+library(lmtest)
+if (!require(car)) install.packages("car")
+library(car)
+```
+
+# Item 1
+
+The data set found in *suicide.csv* contains information on number of suicides committed by country, by year, by sex and by age group. Blank entries in the data set means that data were not collected for that particular year. Do the following tasks given the said data:
+
+1. Import the data set into the R system. (2 points)
+
+```{r, cache = TRUE}
+suicide.data <- read.csv("suicide.csv")
+head(suicide.data)
+```
+
+2. Create a new data set named *summary.country* that contains the following variables: country, year, total number of suicides, population size. (3 points)
+
+```{r, cache = TRUE}
+(summary.country <- suicide.data %>% select(-(sex:age)) %>% group_by(country, year) %>% 
+  summarise(`total number of suicides` = sum(suicides_no, na.rm = TRUE), 
+            `population size` = sum(population, na.rm = TRUE)))
+```
+
+
+3. Create a new data set that contains the top 10 countries with the highest suicide rate per year, i.e. top 10 for 1979 first, then top 10 for 1980, and so on such that each set of top 10 is arranged from highest to lowest number of suicides. (4 points)
+
+```{r, cache = TRUE}
+(top10.suiciderate <- summary.country %>% 
+  mutate(`suicide rate per 100,000 people` = (`total number of suicides` * 100000 / 
+                                                `population size`)) %>%
+  filter(is.infinite(`suicide rate per 100,000 people`) == FALSE) %>%  
+  arrange(year, desc(`suicide rate per 100,000 people`)) %>% 
+  group_by(year) %>% top_n(n = 10, wt = `suicide rate per 100,000 people`) %>% 
+  select(-(`total number of suicides`:`population size`)))
+```
+
+4. From the data set created in task 3, create a dataframe or tibble that contains all the countries that appeared in the top 10 list, a set of columns for all years that are part of the data set which indicates the ranking of each of the country on a given year. If a country did not appear in the top 10 list on a given year, the value assigned to it for that column must be NA. (5 points)
+
+```{r, cache = TRUE}
+(suiciderank.bycountry <- top10.suiciderate %>% group_by(year) %>% 
+  mutate(`suicide rate ranking` = order(`suicide rate per 100,000 people`, 
+                                        decreasing = TRUE)) %>% 
+  select(-`suicide rate per 100,000 people`) %>% 
+  spread(key = year, value = `suicide rate ranking`))
+```
+
+5. Create a plot that best shows how suicidal behavior or tendency among the monitored countries changes across the years. Note that the total number of suicides might be "deceiving" given the size of the population. (8 points)
+
+6. During the most recent year, compare the number of suicides among the age groups using at least 4 summary statistics. Briefly explain what the summary statistics say about the age groups in terms of suicidal tendency. (4 points)
+
+```{r, cache = TRUE}
+(suicide.summary <-suicide.data %>% filter(year == max(year)) %>% 
+    group_by(country, age) %>% summarise(`total number of suicides` = 
+                                           sum(suicides_no, na.rm = TRUE), 
+                                         `population size` = 
+                                           sum(population, na.rm = TRUE)) %>% 
+    mutate(`suicide rate per 100,000 people` = ((`total number of suicides` *
+                                                   100000) / 
+                                                  `population size`)) %>%
+    filter(is.na(`suicide rate per 100,000 people`) == FALSE && 
+             is.infinite(`suicide rate per 100,000 people`) == FALSE) %>%
+    group_by(age) %>% summarise(`total number of suicides` = 
+                                  sum(`total number of suicides`, na.rm = TRUE), 
+                                `average suicide per 100,000 people` = 
+                                  (sum(`total number of suicides`, na.rm = TRUE) * 
+                                     100000) / 
+                                  sum(`population size`, na.rm = TRUE), 
+                                `median suicide per 100,000 people` = 
+                                  median(`suicide rate per 100,000 people`, 
+                                         na.rm = TRUE), 
+                                `standard deviation suicide per 100,000 people` = 
+                                  sd(`suicide rate per 100,000 people`, 
+                                     na.rm = TRUE), 
+                                `IQR suicide per 100,000 people` = 
+                                  IQR(`suicide rate per 100,000 people`, 
+                                      na.rm = TRUE)))
+```
+
+# Item 2
+
+The file **shopping.xlsx** contains two worksheets: shopping and occupation codes. The shopping worksheet contains transactional data of an online store with the following variables: userid, productid, demographic profile of the buyer and the purchase amount (in Php). The worksheet occupation codes contains the code labels of the occupation variable in the shopping worksheet. Using the two worksheets, do the following tasks:
+
+1. Import the two worksheets into the R system using their worksheet name as their object name. (2 points)
+
+```{r, cache = TRUE}
+(shopping <- read_xlsx("shopping.xlsx", sheet="shopping"))
+(`occupation codes` <- read_xlsx("shopping.xlsx", sheet="occupation codes"))
+```
+
+2. Create a new variable in the shopping data set that contains the description of the occupation of the buyer. (2 points)
+
+```{r, cache = TRUE}
+(shopping.withoccupation <- full_join(shopping, `occupation codes`, by = c("Occupation" = "Code")))
+```
+
+3. Parse each of the columns such that categorical variables (except user_id) become factor objects. (2 points)
+
+```{r, cache = TRUE}
+shopping.withoccupation[[2]] <- parse_factor(shopping.withoccupation[[2]], 
+                                             levels = 
+                                              unique(shopping.withoccupation[[2]]),
+                                             ordered = FALSE)
+shopping.withoccupation[[3]] <- parse_factor(shopping.withoccupation[[3]], 
+                                             levels = 
+                                              unique(shopping.withoccupation[[3]]),
+                                             ordered = FALSE)
+shopping.withoccupation[[4]] <- parse_factor(shopping.withoccupation[[4]], 
+                                             levels = c("0-17", "18-25", "26-35", 
+                                                        "36-45", "46-50", "51-55", 
+                                                        "55+"), ordered = TRUE)
+shopping.withoccupation[[6]] <- parse_factor(shopping.withoccupation[[6]], 
+                                             levels = c("0", "1", "2", "3", "4+"), 
+                                             ordered = TRUE)
+shopping.withoccupation[[7]] <- 
+  parse_factor(as.character(shopping.withoccupation[[7]]), 
+               levels = c(0, 1), ordered = TRUE)
+shopping.withoccupation[[9]] <- parse_factor(shopping.withoccupation[[9]], 
+                                             levels = 
+                                              unique(shopping.withoccupation[[9]]),
+                                             ordered = FALSE)
+```
+
+4. Create a dataframe or a tibble named *frequent.spenders* that contains the twenty user IDs with the most number of transactions. The dataframe/tibble must contain the following variables: user_id, number of transactions, and average purchase amount per transaction. (3 points)
+
+```{r, cache = TRUE}
+(frequent.spenders <- shopping.withoccupation %>% group_by(User_ID) %>% 
+  summarise(`number of transactions` = n(), 
+            `average purchase amount per transaction` = 
+              mean(`Purchase Amount`, na.rm = TRUE)) %>% 
+  arrange(desc(`number of transactions`)) %>% 
+  top_n(n = 20, wt = `number of transactions`))
+```
+
+5. Create a dataframe or tibble named *top20.transactions*, a subset of the *shopping* data set containing all transactions made by the top 20 frequent spenders. (3 points)
+
+```{r, cache = TRUE}
+(top20.transactions <- inner_join(shopping, frequent.spenders, by = "User_ID"))
+```
+
+6. Are the top 20 frequent spenders also the top 20 spenders in terms of purchase amount? Use only a single pipeline to create a tibble that contains all top 20 frequent spenders that are also part of the top 20 spenders by purchase amount. The tibble must contain the same set of variables as the one from task 4. (3 points).
+
+```{r, cache = TRUE}
+shopping.withoccupation %>% group_by(User_ID) %>% 
+  summarise(`number of transactions` = n(), 
+            `total purchase amount` = sum(`Purchase Amount`, na.rm = TRUE)) %>% 
+  arrange(desc(`total purchase amount`)) %>% 
+  top_n(n = 20, wt = `total purchase amount`) %>% 
+  inner_join(frequent.spenders[,-2], by = "User_ID")  %>% 
+  select(-`total purchase amount`)
+```
+
+7. Generate three insights from the data set and visualize them using a plot or a set of plots. The three insights should tell a cohesive story about online transaction behavior of the buyers in the data set. (2 points each insight, additional 2 points for coherence of the insights)
+
+# Item 3
+
+The data found in *metrics.rds* were collected so that a prediction equation for lean body weight can be devised. Lean body weight is an important measure of health but is quite hard and expensive to calculate given the currently accepted methodology. In lieu of this complicated procedure, a number of body circumference measures are suggested to be used as predictors of lean body weight. The thirteen input variables are age in years (age), weight in lb (weight), height in inches (height), neck circumference in cm (neck), chest circumference in cm (chest), abdomen 2 circumference in cm (abdomen), hip circumference in cm (hip), thigh circumference in cm (thigh), knee circumference in cm (knee), ankle circumference in cm (ankle), extended biceps circumference in cm (biceps), forearm circumference in cm (forearm), and wrist circumference in cm (wrist). Do the following tasks given these data:
+
+1. Import the data into the R system. (2 points)
+
+```{r, cache = TRUE}
+metrics.rds <- read_rds("metrics.rds")
+head(metrics.rds)
+```
+
+2. Create a function that will compute the following fit statistics: R-squared, Adj. R-squared, AIC, BIC, MSE and MAPE.
+
+```{r, cache = TRUE}
+fit_statistics <- function(model){
+  c('R-squared' = summary(model)$r.squared,
+    'Adj. R-squared' = summary(model)$adj.r.squared,
+    'AIC' = AIC(model),
+    'BIC' = BIC(model),
+    'MSE' = mean(model$residuals ^ 2),
+    'MAPE' = mean(abs(model$residuals / metrics.rds$bodyfat)))
+}
+```
+       
+3. Use the function in task 2 to compare the following model:
+
+    * Full model
+    * Model via backward elimination using the full model as the starting model
+    * Model via stepwise selection
+
+   Choose the best model and justify your choice.
+
+```{r, cache = TRUE}
+# This is the full model, excluding density.
+
+bodyfat.model <- lm(formula = bodyfat ~ . - density, data = metrics.rds)
+summary(bodyfat.model)
+
+# This is the intercept-only model.
+
+bodyfat.intercept <- lm(formula = bodyfat ~ 1, data = metrics.rds)
+summary(bodyfat.intercept)
+
+# This is the model resulting from backward elimination, starting from the full model.
+
+bodyfat.backward <- step(object = bodyfat.model, 
+                         scope = list(lower = bodyfat.intercept), 
+                         direction = "backward")
+summary(bodyfat.backward)
+
+# This is the model resulting from stepwise selection, starting from the intercept-only model.
+
+bodyfat.stepwise <- step(object = bodyfat.intercept, 
+                         scope = list(upper = bodyfat.model), 
+                         direction = "both")
+summary(bodyfat.stepwise)
+
+sapply(list('full.model' = bodyfat.model, 'backward' = bodyfat.backward, 
+            'stepwise' = bodyfat.stepwise), fit_statistics)
+```
+
+4. Validate the assumptions of the linear regression model and diagnose possible data issues.
+
+5. If violations are present, suggest modifications to the data and to the model.
